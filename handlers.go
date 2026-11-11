@@ -70,9 +70,10 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", s.static))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
-	mux.HandleFunc("POST /api/links", s.limited(s.requireAdmin(s.handleCreate)))
-	mux.HandleFunc("GET /api/links", s.limited(s.requireAdmin(s.handleList)))
-	mux.HandleFunc("DELETE /api/links/{code}", s.limited(s.requireAdmin(s.handleDelete)))
+	mux.HandleFunc("POST /api/links", s.guard(s.handleCreate))
+	mux.HandleFunc("GET /api/links", s.guard(s.handleList))
+	mux.HandleFunc("GET /api/links/{code}", s.guard(s.handleGet))
+	mux.HandleFunc("DELETE /api/links/{code}", s.guard(s.handleDelete))
 	mux.HandleFunc("GET /{code}", s.handleRedirect)
 	return securityHeaders(mux)
 }
@@ -194,6 +195,19 @@ func (s *server) handleList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *server) handleGet(w http.ResponseWriter, r *http.Request) {
+	link, err := s.store.Get(r.Context(), r.PathValue("code"))
+	if errors.Is(err, ErrNotFound) {
+		writeError(w, http.StatusNotFound, "no existe")
+		return
+	}
+	if err != nil {
+		s.internalError(w, "leer link", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.toResponse(link))
+}
+
 func (s *server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	err := s.store.Delete(r.Context(), r.PathValue("code"))
 	if errors.Is(err, ErrNotFound) {
@@ -229,14 +243,20 @@ func (s *server) toResponse(l Link) linkResponse {
 	return linkResponse{Link: l, ShortURL: s.cfg.baseURL + "/" + l.Code}
 }
 
-func (s *server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+// guard exige el token. El límite por IP solo cuenta las peticiones sin token
+// válido (todas, si no hay ADMIN_TOKEN): frena la fuerza bruta sin limitar a
+// los clientes autenticados, que pueden crear muchos links seguidos.
+func (s *server) guard(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if s.cfg.adminToken == "" {
+		if s.cfg.adminToken != "" && s.authorized(r) {
 			next(w, r)
 			return
 		}
-		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.adminToken)) != 1 {
+		if !s.limiter.allow(s.clientIP(r)) {
+			writeError(w, http.StatusTooManyRequests, "demasiadas peticiones, espera un minuto")
+			return
+		}
+		if s.cfg.adminToken != "" {
 			writeError(w, http.StatusUnauthorized, "token de acceso inválido")
 			return
 		}
@@ -244,14 +264,9 @@ func (s *server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *server) limited(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.limiter.allow(s.clientIP(r)) {
-			writeError(w, http.StatusTooManyRequests, "demasiadas peticiones, espera un minuto")
-			return
-		}
-		next(w, r)
-	}
+func (s *server) authorized(r *http.Request) bool {
+	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return ok && subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.adminToken)) == 1
 }
 
 func (s *server) clientIP(r *http.Request) string {

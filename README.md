@@ -10,7 +10,7 @@ Pensado para montarse en un subdominio propio, por ejemplo `s.tudominio.com`, de
 - Redirección `302` con **conteo de clics**.
 - Panel en la misma página para ver, abrir y borrar tus links.
 - Protección por **token de acceso** (`ADMIN_TOKEN`) para que nadie use tu dominio para spam o phishing.
-- Límite de 30 peticiones por minuto por IP en la API.
+- Límite de 30 intentos por minuto por IP sin token válido, contra la fuerza bruta. Las peticiones autenticadas no se limitan.
 - Validación de URLs: solo `http`/`https`, máximo 2048 caracteres y sin bucles hacia el propio acortador.
 - Cabeceras de seguridad (CSP, `nosniff`, `no-referrer`, sin iframes).
 - Sin rastreadores, sin analítica de terceros y sin cookies.
@@ -186,6 +186,7 @@ Todas las rutas de `/api` aceptan y devuelven JSON. Si `ADMIN_TOKEN` está defin
 |---|---|---|
 | `POST` | `/api/links` | Crea un link. Cuerpo: `{"url": "...", "alias": "opcional"}` |
 | `GET` | `/api/links` | Lista los 200 links más recientes con sus clics |
+| `GET` | `/api/links/{código}` | Devuelve un link con sus clics |
 | `DELETE` | `/api/links/{código}` | Borra un link |
 | `GET` | `/{código}` | Redirige al destino (público) |
 | `GET` | `/healthz` | Comprobación de salud (público) |
@@ -216,10 +217,11 @@ curl -X POST https://s.ejemplo.com/api/links \
   -d '{"url": "https://ejemplo.com/ofertas", "alias": "promo"}'
 ```
 
-Listar y borrar:
+Listar, consultar uno y borrar:
 
 ```bash
 curl https://s.ejemplo.com/api/links -H "Authorization: Bearer $ADMIN_TOKEN"
+curl https://s.ejemplo.com/api/links/promo -H "Authorization: Bearer $ADMIN_TOKEN"
 curl -X DELETE https://s.ejemplo.com/api/links/promo -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
@@ -231,7 +233,7 @@ Respuestas de error, siempre con la forma `{"error": "mensaje"}`:
 | `401` | Falta el token o no es correcto |
 | `404` | El código no existe |
 | `409` | El alias ya está en uso |
-| `429` | Más de 30 peticiones por minuto desde la misma IP |
+| `429` | Más de 30 intentos sin token válido por minuto desde la misma IP |
 
 **Reglas de los alias:** de 3 a 32 caracteres, con letras, números, `-` y `_`. Están reservados `api`, `static`, `healthz`, `admin`, `favicon.ico` y `robots.txt`.
 
@@ -252,7 +254,7 @@ sqlite3 /opt/acortador/data/acortador.db ".backup '/root/acortador-$(date +%F).d
 | Longitud de los códigos aleatorios | `codeLength` en `handlers.go` |
 | Caracteres de los códigos | `alphabet` en `handlers.go` (sin `l`, `I`, `O`, `0` ni `1` para evitar confusiones) |
 | Alias reservados | `reserved` en `handlers.go` |
-| Límite de peticiones | `newLimiter(30, time.Minute)` en `handlers.go` |
+| Límite de intentos sin token | `newLimiter(30, time.Minute)` en `handlers.go` |
 
 El front se incluye dentro del binario con `go:embed`, así que después de cualquier cambio en `web/` hay que volver a compilar.
 

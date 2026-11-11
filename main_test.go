@@ -129,14 +129,37 @@ func TestStaticAndIndex(t *testing.T) {
 	}
 }
 
+func TestGetLink(t *testing.T) {
+	h := newTestServer(t)
+	do(t, h, "POST", "/api/links", `{"url":"https://example.com/x","alias":"leer"}`, true)
+
+	if rec := do(t, h, "GET", "/api/links/leer", "", false); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("leer sin token: %d", rec.Code)
+	}
+	rec := do(t, h, "GET", "/api/links/leer", "", true)
+	var link linkResponse
+	json.NewDecoder(rec.Body).Decode(&link)
+	if rec.Code != http.StatusOK || link.URL != "https://example.com/x" || link.ShortURL != "https://s.ejemplo.com/leer" {
+		t.Fatalf("leer: %d %+v", rec.Code, link)
+	}
+	if rec := do(t, h, "GET", "/api/links/no-existe", "", true); rec.Code != http.StatusNotFound {
+		t.Fatalf("leer inexistente: %d", rec.Code)
+	}
+}
+
 func TestRateLimit(t *testing.T) {
 	h := newTestServer(t)
+	for i := range 40 {
+		if code := do(t, h, "GET", "/api/links", "", true).Code; code != http.StatusOK {
+			t.Fatalf("petición autenticada %d limitada: %d", i+1, code)
+		}
+	}
 	var last int
 	for range 31 {
-		last = do(t, h, "GET", "/api/links", "", true).Code
+		last = do(t, h, "GET", "/api/links", "", false).Code
 	}
 	if last != http.StatusTooManyRequests {
-		t.Fatalf("esperaba 429 tras 30 peticiones, obtuve %d", last)
+		t.Fatalf("esperaba 429 tras 30 intentos sin token, obtuve %d", last)
 	}
 }
 

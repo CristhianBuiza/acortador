@@ -78,6 +78,22 @@ func (s *Store) Resolve(ctx context.Context, code string) (string, error) {
 	return url, err
 }
 
+func (s *Store) Get(ctx context.Context, code string) (Link, error) {
+	var l Link
+	var created int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT code, url, created_at, clicks FROM links WHERE code = ?`, code).
+		Scan(&l.Code, &l.URL, &created, &l.Clicks)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Link{}, ErrNotFound
+	}
+	if err != nil {
+		return Link{}, err
+	}
+	l.CreatedAt = time.Unix(created, 0).UTC()
+	return l, nil
+}
+
 func (s *Store) List(ctx context.Context, limit int) ([]Link, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT code, url, created_at, clicks FROM links ORDER BY created_at DESC, rowid DESC LIMIT ?`, limit)
