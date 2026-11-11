@@ -1,0 +1,21 @@
+[Unit]
+Description=Acortador de links
+After=network.target
+
+[Service]
+Type=simple
+User=acortador
+Group=acortador
+WorkingDirectory=/opt/acortador
+EnvironmentFile=/opt/acortador/acortador.env
+ExecStart=/opt/acortador/acortador
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/acortador/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Acortador</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Acortador</h1>
+      <p id="host" class="muted">Links cortos</p>
+    </header>
+
+    <form id="shorten" autocomplete="off">
+      <label for="url">URL larga</label>
+      <input id="url" name="url" type="url" placeholder="https://ejemplo.com/una/ruta/muy/larga" required>
+
+      <label for="alias">Alias <span class="muted">(opcional)</span></label>
+      <input id="alias" name="alias" type="text" placeholder="mi-link" pattern="[A-Za-z0-9_\-]{3,32}" maxlength="32">
+
+      <button type="submit">Acortar</button>
+      <p id="error" class="error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" hidden>
+      <a id="short" href="#" target="_blank" rel="noopener"></a>
+      <button id="copy" type="button" class="ghost">Copiar</button>
+    </section>
+
+    <details id="access">
+      <summary>Acceso y mis links</summary>
+      <label for="token">Token de acceso</label>
+      <div class="row">
+        <input id="token" type="password" placeholder="ADMIN_TOKEN del servidor">
+        <button id="save-token" type="button" class="ghost">Guardar</button>
+      </div>
+      <p class="muted small">Se guarda solo en este navegador.</p>
+
+      <table id="links" hidden>
+        <thead><tr><th>Corto</th><th>Destino</th><th>Clics</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </details>
+  </main>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
